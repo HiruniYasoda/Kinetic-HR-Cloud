@@ -108,7 +108,7 @@ export async function checkServiceBusHealth(): Promise<{
   }
 
   try {
-    const res = await fetch(endpoint, { method: 'GET' })
+    const res = await fetch(endpoint, { method: 'GET', signal: AbortSignal.timeout(5000) })
     const latencyMs = Date.now() - start
     return {
       connected: true,

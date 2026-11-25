@@ -837,7 +837,10 @@ export async function verifyAzureFrontDoor(): Promise<AzureServiceDiagnosticRepo
 
   try {
     const start = Date.now()
-    const res = await fetch(frontDoorEndpoint, { method: 'HEAD' }).catch(() => null)
+    const res = await fetch(frontDoorEndpoint, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(5000),
+    }).catch(() => null)
     if (res) {
       latencyMs = Math.max(5, Date.now() - start)
       httpStatus = res.status

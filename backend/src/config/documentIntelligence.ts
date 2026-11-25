@@ -49,6 +49,7 @@ export async function analyzeDocumentOCR(
       const res = await fetch(targetUrl, {
         method: 'GET',
         headers: { 'Ocp-Apim-Subscription-Key': key },
+        signal: AbortSignal.timeout(8000),
       })
 
       if (res.ok) {
@@ -120,6 +121,7 @@ export async function checkDocumentIntelligenceHealth(): Promise<{
     const res = await fetch(targetUrl, {
       method: 'GET',
       headers: { 'Ocp-Apim-Subscription-Key': key },
+      signal: AbortSignal.timeout(5000),
     })
 
     const latencyMs = Date.now() - start
