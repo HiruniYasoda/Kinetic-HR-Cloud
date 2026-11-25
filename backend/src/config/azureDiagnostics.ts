@@ -3,7 +3,7 @@ import { BlobServiceClient } from '@azure/storage-blob'
 import https from 'https'
 import http from 'http'
 import { URL } from 'url'
-import { checkAzureOpenAIHealth, getOpenAIConfig } from './openai'
+import { checkAzureOpenAIHealth } from './openai'
 
 export interface ServiceDiagnosticEvidence {
   requestId?: string
@@ -325,7 +325,6 @@ export async function verifyBlobStorage(isLiveMode: boolean): Promise<AzureServi
 export async function verifyAzureFunctions(): Promise<AzureServiceDiagnosticReport> {
   const port = process.env.PORT || '7071'
   const endpoint = `http://localhost:${port}/api/auth/organization`
-  const startMs = Date.now()
 
   try {
     const res = await makeHttpsRequest(endpoint, {

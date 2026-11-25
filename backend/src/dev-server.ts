@@ -403,7 +403,7 @@ process.on('uncaughtException', (err: any) => {
   console.error('❌ Uncaught Exception:', err)
 })
 
-process.on('unhandledRejection', (reason: any, promise: any) => {
+process.on('unhandledRejection', (reason: any) => {
   console.error('❌ Unhandled Rejection:', reason)
 })
 
