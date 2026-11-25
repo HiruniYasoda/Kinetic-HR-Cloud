@@ -869,7 +869,7 @@ export async function verifyAzureFrontDoor(): Promise<AzureServiceDiagnosticRepo
  * 12. Microsoft Entra ID (Azure AD SSO, RBAC & OIDC) Diagnostic
  */
 export async function verifyMicrosoftEntraId(): Promise<AzureServiceDiagnosticReport> {
-  const tenantId = process.env.AZURE_TENANT_ID || '3b429074-b9db-484d-9ef8-16e78864700d'
+  const tenantId = process.env.AZURE_TENANT_ID || '00000000-0000-0000-0000-000000000000'
   const authority = process.env.AZURE_ENTRA_AUTHORITY || `https://login.microsoftonline.com/${tenantId}`
   const oidcDiscoveryUrl = 'https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration'
 
