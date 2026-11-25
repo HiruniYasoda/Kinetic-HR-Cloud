@@ -3,7 +3,7 @@
  * Handles enterprise HR policy indexing, semantic/full-text search, and cross-tenant knowledge retrieval.
  */
 
-import { generateProductionSeedData } from '../scripts/seedDataGenerator'
+import { getSeedData } from './seedDataset'
 import { loadLocalSettings } from './env'
 
 export interface AzureSearchConfig {
@@ -139,7 +139,7 @@ export async function seedPolicyDocuments(): Promise<{ success: boolean; indexed
   await ensurePolicyIndex()
 
   try {
-    const seed = generateProductionSeedData()
+    const seed = getSeedData()
     const policies = seed.POLICIES || []
 
     const documents: PolicySearchDocument[] = policies.map((p: any) => ({

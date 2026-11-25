@@ -1,128 +1,21 @@
 import { CosmosClient, Container, Database } from '@azure/cosmos'
 import fs from 'fs'
 import path from 'path'
+import {
+  syncItemToDRVault,
+  syncItemsToDRVault,
+  setSimulatedDROutage,
+  getIsDROutageSimulated,
+  getDRStatus,
+} from './drVault'
+import { buildSeedCollections } from './seedDataset'
 
-const DR_STORAGE_DIR = path.resolve(__dirname, '../../storage')
-const DR_VAULT_FILE = path.join(DR_STORAGE_DIR, 'disaster_recovery_vault.json')
-
-let isDROutageSimulated = false
-let drOutageSimulatedAt: string | null = null
-let totalDRFailoverEvents = 0
-let lastRealtimeSyncAt = new Date().toISOString()
-let drVaultData: Record<string, any[]> = {}
-
-function initDRVault() {
-  try {
-    if (!fs.existsSync(DR_STORAGE_DIR)) {
-      fs.mkdirSync(DR_STORAGE_DIR, { recursive: true })
-    }
-    if (fs.existsSync(DR_VAULT_FILE)) {
-      const raw = fs.readFileSync(DR_VAULT_FILE, 'utf-8')
-      drVaultData = JSON.parse(raw)
-    } else {
-      drVaultData = generateSeedDataset()
-      fs.writeFileSync(DR_VAULT_FILE, JSON.stringify(drVaultData, null, 2), 'utf-8')
-    }
-  } catch (err) {
-    console.warn('⚠️ [DR VAULT] Initialized in-memory fallback:', err)
-    drVaultData = generateSeedDataset()
-  }
-}
-
-export function syncItemToDRVault(containerName: string, item: any) {
-  if (!drVaultData[containerName]) drVaultData[containerName] = []
-  const idx = drVaultData[containerName].findIndex((x: any) => x.id === item.id)
-  if (idx >= 0) {
-    drVaultData[containerName][idx] = item
-  } else {
-    drVaultData[containerName].push(item)
-  }
-  lastRealtimeSyncAt = new Date().toISOString()
-  try {
-    if (!fs.existsSync(DR_STORAGE_DIR)) fs.mkdirSync(DR_STORAGE_DIR, { recursive: true })
-    fs.writeFileSync(DR_VAULT_FILE, JSON.stringify(drVaultData, null, 2), 'utf-8')
-  } catch (_) {}
-}
-
-export function syncItemsToDRVault(containerName: string, items: any[]) {
-  if (!items || items.length === 0) return
-  if (!drVaultData[containerName]) drVaultData[containerName] = []
-  for (const item of items) {
-    const idx = drVaultData[containerName].findIndex((x: any) => x.id === item.id)
-    if (idx >= 0) {
-      drVaultData[containerName][idx] = item
-    } else {
-      drVaultData[containerName].push(item)
-    }
-  }
-  lastRealtimeSyncAt = new Date().toISOString()
-  try {
-    if (!fs.existsSync(DR_STORAGE_DIR)) fs.mkdirSync(DR_STORAGE_DIR, { recursive: true })
-    fs.writeFileSync(DR_VAULT_FILE, JSON.stringify(drVaultData, null, 2), 'utf-8')
-  } catch (_) {}
-}
-
-export function setSimulatedDROutage(active: boolean) {
-  isDROutageSimulated = active
-  if (active) {
-    drOutageSimulatedAt = new Date().toISOString()
-    totalDRFailoverEvents++
-    console.warn('🚨 [BCDR FAILOVER TRIGGERED] Primary Azure Region Outage Simulated! Real-time traffic rerouted to DR Hot Standby.')
-  } else {
-    console.log('🟢 [BCDR FAILOVER RESTORED] Primary Azure Region restored to Normal Leader state.')
-  }
-}
-
-export function getIsDROutageSimulated(): boolean {
-  return isDROutageSimulated
-}
-
-export function getDRStatus() {
-  const containerKeys = Object.keys(drVaultData)
-  let totalItemsCount = 0
-  for (const k of containerKeys) {
-    totalItemsCount += drVaultData[k]?.length || 0
-  }
-
-  return {
-    timestamp: new Date().toISOString(),
-    isFailoverActive: isDROutageSimulated,
-    activeRoute: isDROutageSimulated ? 'DISASTER_RECOVERY_HOT_STANDBY' : 'PRIMARY_AZURE_CLOUD',
-    primary: {
-      account: 'kinetic-hr',
-      endpoint: process.env.COSMOS_DB_ENDPOINT || 'https://kinetic-hr.documents.azure.com:443/',
-      region: 'South India (Primary Datacenter)',
-      status: isDROutageSimulated ? 'OUTAGE_SIMULATED' : 'ONLINE',
-      mode: 'Active-Active Multi-Region Leader',
-      latencyMs: isDROutageSimulated ? 0 : 6,
-      availabilitySLA: '99.999%',
-    },
-    secondaryCloudDR: {
-      account: 'kinetic-hr-dr',
-      endpoint: 'https://kinetic-hr-dr.documents.azure.com:443/',
-      region: 'Central India (Azure Paired Region)',
-      status: isDROutageSimulated ? 'ACTIVE_FAILOVER' : 'HOT_STANDBY',
-      replicationLagMs: 4,
-      syncState: 'REALTIME_IN_SYNC',
-      consistency: 'Session Level (RPO = 0, RTO < 1.5s)',
-      backbone: 'Microsoft Global Optical Fiber Mesh',
-    },
-    localAirGapVault: {
-      storageType: 'Encrypted Persistent Disk Store',
-      filePath: 'storage/disaster_recovery_vault.json',
-      status: 'SYNCHRONIZED',
-      lastSyncedAt: lastRealtimeSyncAt,
-      syncedContainersCount: containerKeys.length,
-      totalSyncedRecords: totalItemsCount,
-      airGapProtection: 'True (Zero Data Loss Offline Resiliency)',
-    },
-    metrics: {
-      totalFailoverEvents: totalDRFailoverEvents,
-      lastFailoverAt: drOutageSimulatedAt,
-      rpoSeconds: 0,
-      rtoSeconds: 1.2,
-    },
-  }
+export {
+  syncItemToDRVault,
+  syncItemsToDRVault,
+  setSimulatedDROutage,
+  getIsDROutageSimulated,
+  getDRStatus,
 }
 
 let client: CosmosClient | null = null
@@ -154,27 +47,6 @@ export function getCosmosDatabase(): Database | null {
 }
 
 
-// Generates full substantial seed dataset for local memory database
-function generateSeedDataset() {
-  const { generateProductionSeedData } = require('../scripts/seedDataGenerator')
-  const data = generateProductionSeedData()
-  return {
-    organizations: data.ORGANIZATIONS,
-    departments: data.DEPARTMENTS,
-    users: data.USERS,
-    leave_balances: data.LEAVE_BALANCES,
-    leaves: [],
-    leave_plans: [],
-    attendance: data.ATTENDANCE_RECORDS,
-    payslips: data.PAYSLIPS,
-    policies: data.POLICIES,
-    document_requests: data.DOCUMENT_REQUESTS,
-    notifications: data.NOTIFICATIONS,
-    audit_logs: data.AUDIT_LOGS,
-    branches: data.BRANCHES,
-  }
-}
-
 const LOCAL_DB_FILE = path.resolve(__dirname, '../../../data/local-db.json')
 
 function loadLocalDataFromDisk(): Record<string, any[]> {
@@ -193,7 +65,7 @@ function loadLocalDataFromDisk(): Record<string, any[]> {
   } catch (err) {
     console.warn('Could not read local-db.json, falling back to seed generator:', err)
   }
-  const seed = generateSeedDataset()
+  const seed = buildSeedCollections()
   saveLocalDataToDisk(seed)
   return seed
 }
@@ -350,7 +222,7 @@ export function getTenantContainer(containerName: string): Container {
     items: {
       query: (querySpec: any, options?: any) => ({
         fetchAll: async () => {
-          if (isDROutageSimulated) {
+          if (getIsDROutageSimulated()) {
             return mockContainer.items.query(querySpec).fetchAll()
           }
 
@@ -370,7 +242,7 @@ export function getTenantContainer(containerName: string): Container {
         syncItemToDRVault(containerName, item)
         try { await mockContainer.items.create(item) } catch (_) {}
 
-        if (isDROutageSimulated) {
+        if (getIsDROutageSimulated()) {
           return { resource: item }
         }
 
@@ -385,7 +257,7 @@ export function getTenantContainer(containerName: string): Container {
         syncItemToDRVault(containerName, item)
         try { await mockContainer.items.upsert(item) } catch (_) {}
 
-        if (isDROutageSimulated) {
+        if (getIsDROutageSimulated()) {
           return { resource: item }
         }
 
@@ -399,7 +271,7 @@ export function getTenantContainer(containerName: string): Container {
     },
     item: (id: string, partitionKey?: string) => ({
       read: async () => {
-        if (isDROutageSimulated) {
+        if (getIsDROutageSimulated()) {
           return mockContainer.item(id, partitionKey).read()
         }
 
