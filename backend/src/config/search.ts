@@ -73,6 +73,7 @@ export async function ensurePolicyIndex(): Promise<{ success: boolean; created: 
     const checkRes = await fetch(indexUrl, {
       method: 'GET',
       headers: { 'api-key': key },
+      signal: AbortSignal.timeout(8000),
     })
 
     if (checkRes.ok) {
@@ -107,6 +108,7 @@ export async function ensurePolicyIndex(): Promise<{ success: boolean; created: 
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(schema),
+        signal: AbortSignal.timeout(8000),
       })
 
       if (!createRes.ok) {
@@ -168,6 +170,7 @@ export async function seedPolicyDocuments(): Promise<{ success: boolean; indexed
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(batch),
+      signal: AbortSignal.timeout(10000),
     })
 
     if (!res.ok) {
@@ -217,6 +220,7 @@ export async function searchPolicies(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(bodyPayload),
+      signal: AbortSignal.timeout(8000),
     })
 
     if (!res.ok) {
@@ -280,6 +284,7 @@ export async function checkAzureSearchHealth(): Promise<{
     const res = await fetch(listIndexesUrl, {
       method: 'GET',
       headers: { 'api-key': key },
+      signal: AbortSignal.timeout(8000),
     })
 
     const latencyMs = Date.now() - start
