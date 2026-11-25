@@ -53,7 +53,6 @@ export async function arbitrateLeaveConflict(
   conflictDate: string,
   allowedCapacityLimit: number = 5
 ): Promise<AIConflictArbitrationReport> {
-  // 1. Fetch leave requests for this tenant
   const allLeaves = await queryTenantItems<any>(
     'leaves',
     tenantId,
@@ -61,29 +60,23 @@ export async function arbitrateLeaveConflict(
     [{ name: '@tenantId', value: tenantId }]
   )
 
-  // Filter leaves that overlap with conflictDate and match department (if provided)
   const conflictingRequests: LeaveConflictCandidate[] = allLeaves.filter(
     l => l.startDate <= conflictDate && l.endDate >= conflictDate && (!department || l.department === department) && l.status === 'pending'
   )
 
-  // If no pending requests found for conflictDate, return all pending requests for that department as candidates
   const candidatesToEvaluate = conflictingRequests.length > 0
     ? conflictingRequests
     : allLeaves.filter(l => (!department || l.department === department) && l.status === 'pending')
 
-  // 3. For each candidate, dynamically analyze historical logs and reason sentiment
   const evaluatedCandidates: AIEvaluationResult[] = []
 
   for (const candidate of candidatesToEvaluate) {
-    // A. Count historical approved leaves in past 12 months for this employee from database
     const employeePastApprovedLeaves = allLeaves.filter(
       l => l.employeeId === candidate.employeeId && l.status === 'approved' && l.id !== candidate.id
     )
 
-    // Fallback to explicitly recorded priorLeavesCount or count from database logs
     const historicalAbsencesCount = candidate.priorLeavesCount ?? employeePastApprovedLeaves.reduce((acc, curr) => acc + (curr.requestedDays || 1), 0)
 
-    // B. Analyze reason text urgency using NLP keyword scoring
     const reasonText = (candidate.reason || '').toLowerCase()
     let urgencyLevel: AIEvaluationResult['urgencyLevel'] = 'Routine'
     let urgencyWeight = 10
@@ -120,10 +113,8 @@ export async function arbitrateLeaveConflict(
     })
   }
 
-  // 4. Rank candidates by AI Score descending
   evaluatedCandidates.sort((a, b) => b.aiScore - a.aiScore)
 
-  // 5. Assign ranks and recommendations based on capacity limit
   const capacityLimit = Math.max(1, Number(allowedCapacityLimit) || 5)
   const aiConfig = getOpenAIConfig()
   let engineMode: 'OpenAI/Azure OpenAI LLM' | 'Kinetic Autonomous NLP & Audit Log Engine' = 'Kinetic Autonomous NLP & Audit Log Engine'

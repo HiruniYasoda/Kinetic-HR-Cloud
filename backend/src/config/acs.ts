@@ -1,6 +1,5 @@
 /**
- * Azure Communication Services (ACS) Module
- * Double-Way Resilient SMS & Email Gateway with Terminal Status Badges
+ * Azure Communication Services (ACS) SMS & Email Gateway with local fallback.
  */
 
 import { loadLocalSettings } from './env'

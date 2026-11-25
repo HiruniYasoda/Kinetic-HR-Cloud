@@ -1,6 +1,5 @@
 /**
- * Azure AI Document Intelligence Module (Form Recognizer)
- * OCR & Document Data Extraction with Double-Way Resilience
+ * Azure AI Document Intelligence (Form Recognizer) OCR client with local fallback.
  */
 
 import { loadLocalSettings } from './env'

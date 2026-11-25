@@ -1,6 +1,5 @@
 /**
- * Azure Service Bus Module
- * Enterprise Pub/Sub Event Pipeline with Double-Way Resilience
+ * Azure Service Bus event publisher with in-memory queue fallback.
  */
 
 import { loadLocalSettings } from './env'

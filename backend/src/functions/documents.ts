@@ -14,7 +14,7 @@ import {
 
 /**
  * POST /api/documents/request
- * AI Underlayer Document Generation & Verification Pipeline
+ * Creates and verifies an HR document request
  */
 export async function createDocumentRequest(
   request: HttpRequest,

@@ -351,7 +351,7 @@ const server = http.createServer(async (req, res) => {
           info: console.info,
         }
 
-        console.log(`\n📡 [API REQ] ${req.method} ${pathname}`)
+        console.log(`${req.method} ${pathname}`)
         try {
           const result = await route.handler(mockReq as HttpRequest, mockContext as InvocationContext)
           const statusCode = result.status || 200
@@ -391,8 +391,7 @@ const server = http.createServer(async (req, res) => {
 
 server.on('error', (err: any) => {
   if (err.code === 'EADDRINUSE') {
-    console.error(`\n❌ Port ${PORT} is already in use by another process.`)
-    console.error(`👉 You can free the port or specify another port using: $env:PORT="7072"; npm run dev\n`)
+    console.error(`Port ${PORT} is already in use. Set PORT=<port> to use another port.`)
     process.exit(1)
   } else {
     console.error('Server error:', err)
@@ -400,97 +399,36 @@ server.on('error', (err: any) => {
 })
 
 process.on('uncaughtException', (err: any) => {
-  console.error('❌ Uncaught Exception:', err)
+  console.error('Uncaught Exception:', err)
 })
 
 process.on('unhandledRejection', (reason: any) => {
-  console.error('❌ Unhandled Rejection:', reason)
+  console.error('Unhandled Rejection:', reason)
 })
 
 server.listen(PORT, async () => {
-  console.log(`\n================================================================================`)
-  console.log(`🚀 KINETIC HR ENTERPRISE BACKEND ONLINE: http://localhost:${PORT}`)
-  console.log(`--------------------------------------------------------------------------------`)
-
+  let cosmosStatus = 'mock'
   if (isCosmosConfigured()) {
     const db = getCosmosDatabase()
-    const endpoint = process.env.COSMOS_DB_ENDPOINT
-    const dbName = process.env.COSMOS_DB_DATABASE || 'KineticHR'
     try {
       const startMs = Date.now()
       await db?.read()
-      const latencyMs = Date.now() - startMs
-      console.log(`🟢 [AZURE COSMOS DB] STATUS: CONNECTED & ONLINE (${latencyMs}ms)`)
-      console.log(`   Endpoint    : ${endpoint}`)
-      console.log(`   Database    : ${dbName}`)
-      console.log(`   Active Mode : LIVE CLOUD AZURE DATA (Double-Way: Azure Primary)`)
+      cosmosStatus = `connected (${Date.now() - startMs}ms)`
     } catch (err: any) {
-      console.log(`⚠️  [AZURE COSMOS DB] STATUS: CONNECTION FAILED (${err.message})`)
-      console.log(`   Active Mode : IN-MEMORY MOCK DATA FALLBACK (Double-Way: Failover Active)`)
+      cosmosStatus = `fallback (${err.message})`
     }
-  } else {
-    console.log(`🟡 [DATABASE STATUS] COSMOS DB CREDENTIALS NOT CONFIGURED`)
-    console.log(`   Active Mode : IN-MEMORY MOCK DATA (Local offline development dataset)`)
   }
 
-  if (process.env.BLOB_STORAGE_CONNECTION_STRING) {
-    const containerName = process.env.BLOB_CONTAINER_TENANTS || 'tenants'
-    console.log(`🟢 [AZURE BLOB STORAGE] STATUS: CONFIGURED (Container: "${containerName}")`)
-  } else {
-    console.log(`🟡 [AZURE BLOB STORAGE] STATUS: OFFLINE (Local SAS Token Simulator Active)`)
-  }
+  const aiEnabled = Boolean(process.env.AZURE_OPENAI_KEY && process.env.AZURE_OPENAI_ENDPOINT)
+  const searchEnabled = Boolean(process.env.AZURE_SEARCH_KEY && process.env.AZURE_SEARCH_ENDPOINT)
 
-  // Additional Azure Services Telemetry Badges
-  const fdEndpoint = process.env.AZURE_FRONTDOOR_ENDPOINT || 'https://kinetichr-edge.azurefd.net'
-  console.log(`🟢 [AZURE FRONT DOOR] STATUS: CONFIGURED (Global Anycast Edge & WAF: "${fdEndpoint}")`)
-
-  const tenantId = process.env.AZURE_TENANT_ID || '00000000-0000-0000-0000-000000000000'
-  console.log(`🟢 [MICROSOFT ENTRA ID] STATUS: CONFIGURED (OAuth 2.0 / OIDC SSO & RBAC: Tenant ${tenantId.substring(0, 8)}...)`)
-
-  if (process.env.AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING || process.env.AZURE_ACS_CONNECTION_STRING) {
-    console.log(`🟢 [AZURE COMMUNICATION SERVICES] STATUS: CONFIGURED (Twilio / ACS SMS & Email Gateway)`)
-  } else {
-    console.log(`🟡 [AZURE COMMUNICATION SERVICES] STATUS: SIMULATED (Local SMS & Email Gateway Active)`)
-  }
-
-  if (process.env.AZURE_SERVICE_BUS_CONNECTION_STRING) {
-    console.log(`🟢 [AZURE SERVICE BUS] STATUS: CONFIGURED (Live Pub/Sub Topic Pipeline)`)
-  } else {
-    console.log(`🟡 [AZURE SERVICE BUS] STATUS: SIMULATED (In-Memory Pub/Sub Queue Active)`)
-  }
-
-  if (process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT) {
-    console.log(`🟢 [AZURE AI DOCUMENT INTELLIGENCE] STATUS: CONFIGURED (Form Recognizer OCR Engine)`)
-  } else {
-    console.log(`🟡 [AZURE AI DOCUMENT INTELLIGENCE] STATUS: SIMULATED (Local OCR Extraction Engine Active)`)
-  }
-
-  if (process.env.APPLICATIONINSIGHTS_CONNECTION_STRING || process.env.APPINSIGHTS_INSTRUMENTATIONKEY) {
-    console.log(`🟢 [AZURE APPLICATION INSIGHTS] STATUS: CONFIGURED (Live APM Telemetry Tracing)`)
-  } else {
-    console.log(`🟡 [AZURE APPLICATION INSIGHTS] STATUS: SIMULATED (In-Memory APM Tracing Active)`)
-  }
-
-  if (process.env.AZURE_OPENAI_KEY && process.env.AZURE_OPENAI_ENDPOINT) {
-    const deployment = process.env.AZURE_OPENAI_DEPLOYMENT || 'gpt-4o-1'
-    console.log(`🟢 [AZURE OPENAI] STATUS: ONLINE (Deployment: "${deployment}")`)
-  } else {
-    console.log(`🟡 [AZURE OPENAI] STATUS: SIMULATED (Local GPT-4o Scenario Engine Active)`)
-  }
-
-  if (process.env.AZURE_SEARCH_KEY && process.env.AZURE_SEARCH_ENDPOINT) {
-    const indexName = process.env.AZURE_SEARCH_INDEX || 'kinetic-hr-policies'
-    console.log(`🟢 [AZURE AI SEARCH] STATUS: ONLINE (Index: "${indexName}")`)
-    // Asynchronously ensure index & seed policies
+  if (searchEnabled) {
     ensurePolicyIndex()
       .then(() => seedPolicyDocuments())
       .catch(err => console.warn('[Search] Initial index seed failed:', err?.message || err))
-  } else {
-    console.log(`🟡 [AZURE AI SEARCH] STATUS: SIMULATED (In-Memory RAG Vector Index Active)`)
   }
 
-  console.log(`--------------------------------------------------------------------------------`)
-  console.log(`🛡️  DOUBLE-WAY ARCHITECTURE: Live Azure Cloud with In-Memory Mock Failover`)
-  console.log(`📡 Ready for incoming requests from frontend`)
-  console.log(`================================================================================\n`)
+  console.log(
+    `[KineticHR] Listening on http://localhost:${PORT} (cosmos=${cosmosStatus}, openai=${aiEnabled ? 'live' : 'mock'}, search=${searchEnabled ? 'live' : 'mock'})`
+  )
 })
