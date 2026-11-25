@@ -136,10 +136,23 @@ export async function syncFingerprintLogs(
 
     const tenantId = auth.user!.tenantId
     const deviceId = body.deviceId || 'FP-BIOMETRIC-GATE-1'
+    if (!Array.isArray(body?.logs) || body.logs.length === 0) {
+      return { status: 400, jsonBody: { error: 'A non-empty logs array is required.' } }
+    }
+
     const processedRecords: any[] = []
 
-    for (const log of body.logs || []) {
+    for (const log of body.logs) {
+      if (!log?.employeeId || !log?.timestamp || (log.scanType !== 'IN' && log.scanType !== 'OUT')) {
+        return {
+          status: 400,
+          jsonBody: { error: 'Each log entry must include employeeId, timestamp, and scanType (IN or OUT).' },
+        }
+      }
       const scanDate = new Date(log.timestamp)
+      if (isNaN(scanDate.getTime())) {
+        return { status: 400, jsonBody: { error: `Invalid timestamp "${log.timestamp}" in biometric logs.` } }
+      }
       const dateStr = scanDate.toISOString().split('T')[0]
       const attId = `att-${log.employeeId}-${dateStr}`
 
