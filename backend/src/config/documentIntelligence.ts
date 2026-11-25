@@ -37,7 +37,7 @@ export function isDocumentIntelligenceConfigured(): boolean {
  */
 export async function analyzeDocumentOCR(
   documentType: string,
-  fileName: string
+  _fileName: string
 ): Promise<DocumentOcrResult> {
   const nowIso = new Date().toISOString()
   const { endpoint, key, isConfigured } = getDocumentIntelligenceConfig()
@@ -53,9 +53,6 @@ export async function analyzeDocumentOCR(
       })
 
       if (res.ok) {
-        console.log(
-          `🟢 [AZURE AI DOCUMENT INTELLIGENCE] OCR Processed file "${fileName}" via Live Form Recognizer Model`
-        )
         return {
           confidence: 0.998,
           extractedFieldsCount: 16,
@@ -70,15 +67,10 @@ export async function analyzeDocumentOCR(
         }
       }
     } catch (err: any) {
-      console.warn(
-        `⚠️  [AZURE AI DOCUMENT INTELLIGENCE ERROR] Analysis failed (${err.message}). Falling back to Simulated OCR!`
-      )
+      console.warn(`[DocumentIntelligence] OCR check failed (${err.message}), using simulated OCR.`)
     }
   }
 
-  console.log(
-    `🟡 [MOCK AI DOCUMENT INTELLIGENCE] Extracted 14 Structured Key-Value Fields from "${fileName}" (Confidence: 99.4%)`
-  )
   return {
     confidence: 0.994,
     extractedFieldsCount: 14,

@@ -327,38 +327,7 @@ export function getTenantContainer(containerName: string): Container {
   const mockContainer = createMockContainer(containerName)
 
   if (!db || !isCosmosConfigured()) {
-    return {
-      items: {
-        query: (querySpec: any) => ({
-          fetchAll: async () => {
-            console.log(`🟡 [MOCK DATA] Query on container "${containerName}" -> Served from In-Memory Mock Store`)
-            return mockContainer.items.query(querySpec).fetchAll()
-          },
-        }),
-        create: async (item: any) => {
-          console.log(`🟡 [MOCK DATA] Created item "${item?.id || 'new'}" in container "${containerName}" (In-Memory Mock Store)`)
-          return mockContainer.items.create(item)
-        },
-        upsert: async (item: any) => {
-          console.log(`🟡 [MOCK DATA] Upserted item "${item?.id || 'new'}" in container "${containerName}" (In-Memory Mock Store)`)
-          return mockContainer.items.upsert(item)
-        },
-      },
-      item: (id: string, partitionKey?: string) => ({
-        read: async () => {
-          console.log(`🟡 [MOCK DATA] Read item "${id}" from container "${containerName}" (In-Memory Mock Store)`)
-          return mockContainer.item(id, partitionKey).read()
-        },
-        replace: async (newItem: any) => {
-          console.log(`🟡 [MOCK DATA] Replaced item "${id}" in container "${containerName}" (In-Memory Mock Store)`)
-          return mockContainer.item(id, partitionKey).replace(newItem)
-        },
-        delete: async () => {
-          console.log(`🟡 [MOCK DATA] Deleted item "${id}" from container "${containerName}" (In-Memory Mock Store)`)
-          return mockContainer.item(id, partitionKey).delete()
-        },
-      }),
-    } as unknown as Container
+    return mockContainer
   }
 
   const realContainer = db.container(containerName)
@@ -376,83 +345,54 @@ export function getTenantContainer(containerName: string): Container {
     }
   }
 
-  // Double-Way Resilient Wrapper: Executes live Azure Cosmos DB with Real-Time BCDR Replication & Failover
+  // Resilient wrapper: primary Azure Cosmos DB with DR vault sync & local failover
   return {
     items: {
       query: (querySpec: any, options?: any) => ({
         fetchAll: async () => {
           if (isDROutageSimulated) {
-            console.warn(
-              `🚨 [BCDR FAILOVER ACTIVE] Primary Azure region simulated outage active. Serving query on "${containerName}" from Synchronized DR Replica & Local Vault.`
-            )
-            const fallbackResult = await mockContainer.items.query(querySpec).fetchAll()
-            return fallbackResult
+            return mockContainer.items.query(querySpec).fetchAll()
           }
 
           try {
             const result = await withTimeout(realContainer.items.query(querySpec, options).fetchAll(), 3000)
-            console.log(
-              `🟢 [AZURE COSMOS DB] Query on container "${containerName}" -> Returned ${result.resources?.length ?? 0} item(s) from Live Azure Cloud`
-            )
             if (result.resources && result.resources.length > 0) {
               syncItemsToDRVault(containerName, result.resources)
             }
             return result
           } catch (err: any) {
-            console.error(
-              `❌ [AZURE COSMOS DB ERROR] Query failed on "${containerName}": ${err.message}`
-            )
-            console.warn(`🟡 [DISASTER RECOVERY FALLBACK] Serving from Synchronized DR Replica & Local Vault`)
-            const fallbackResult = await mockContainer.items.query(querySpec).fetchAll()
-            return fallbackResult
+            console.error(`[CosmosDB] Query failed on "${containerName}": ${err.message}`)
+            return mockContainer.items.query(querySpec).fetchAll()
           }
         },
       }),
       create: async (item: any, options?: any) => {
-        // Always mirror to DR vault in real time
         syncItemToDRVault(containerName, item)
         try { await mockContainer.items.create(item) } catch (_) {}
 
         if (isDROutageSimulated) {
-          console.warn(`🚨 [BCDR FAILOVER ACTIVE] Inserted item "${item?.id}" into Synchronized DR Replica & Vault (Outage Mode)`)
           return { resource: item }
         }
 
         try {
-          const result = await withTimeout(realContainer.items.create(item, options), 3000)
-          console.log(
-            `🟢 [AZURE COSMOS DB] Inserted item "${item?.id || 'new'}" into container "${containerName}" (Live Azure Cloud & Realtime DR Synced)`
-          )
-          return result
+          return await withTimeout(realContainer.items.create(item, options), 3000)
         } catch (err: any) {
-          console.error(
-            `❌ [AZURE COSMOS DB ERROR] Insert failed on "${containerName}": ${err.message}`
-          )
-          console.warn(`🟡 [DISASTER RECOVERY FALLBACK] Saved to Synchronized DR Replica & Vault`)
+          console.error(`[CosmosDB] Insert failed on "${containerName}": ${err.message}`)
           return { resource: item }
         }
       },
       upsert: async (item: any, options?: any) => {
-        // Always mirror to DR vault in real time
         syncItemToDRVault(containerName, item)
         try { await mockContainer.items.upsert(item) } catch (_) {}
 
         if (isDROutageSimulated) {
-          console.warn(`🚨 [BCDR FAILOVER ACTIVE] Upserted item "${item?.id}" into Synchronized DR Replica & Vault (Outage Mode)`)
           return { resource: item }
         }
 
         try {
-          const result = await withTimeout(realContainer.items.upsert(item, options), 3000)
-          console.log(
-            `🟢 [AZURE COSMOS DB] Upserted item "${item?.id || 'new'}" into container "${containerName}" (Live Azure Cloud & Realtime DR Synced)`
-          )
-          return result
+          return await withTimeout(realContainer.items.upsert(item, options), 3000)
         } catch (err: any) {
-          console.error(
-            `❌ [AZURE COSMOS DB ERROR] Upsert failed on "${containerName}": ${err.message}`
-          )
-          console.warn(`🟡 [DISASTER RECOVERY FALLBACK] Upserted to Synchronized DR Replica & Vault`)
+          console.error(`[CosmosDB] Upsert failed on "${containerName}": ${err.message}`)
           return { resource: item }
         }
       },
@@ -460,46 +400,32 @@ export function getTenantContainer(containerName: string): Container {
     item: (id: string, partitionKey?: string) => ({
       read: async () => {
         if (isDROutageSimulated) {
-          console.warn(`🚨 [BCDR FAILOVER ACTIVE] Read item "${id}" from Synchronized DR Replica & Vault`)
           return mockContainer.item(id, partitionKey).read()
         }
 
         try {
           const result = await withTimeout(realContainer.item(id, partitionKey).read(), 2500)
           if (result.resource) {
-            console.log(
-              `🟢 [AZURE COSMOS DB] Read item "${id}" from container "${containerName}" (Live Azure Cloud)`
-            )
             syncItemToDRVault(containerName, result.resource)
             return result
           }
           const mockResult = await mockContainer.item(id, partitionKey).read()
           if (mockResult.resource) {
-            console.log(
-              `🟡 [DISASTER RECOVERY FALLBACK] Item "${id}" retrieved from Synchronized DR Store`
-            )
             return mockResult
           }
           return result
         } catch (err: any) {
-          console.error(
-            `❌ [AZURE COSMOS DB ERROR] Read "${id}" failed on "${containerName}": ${err.message}`
-          )
+          console.error(`[CosmosDB] Read "${id}" failed on "${containerName}": ${err.message}`)
           return mockContainer.item(id, partitionKey).read()
         }
       },
       replace: async (newItem: any, options?: any) => {
         try {
           const result = await withTimeout(realContainer.item(id, partitionKey).replace(newItem, options), 2500)
-          console.log(
-            `🟢 [AZURE COSMOS DB] Updated item "${id}" in container "${containerName}" (Live Azure Cloud)`
-          )
           try { await mockContainer.item(id, partitionKey).replace(newItem) } catch (_) {}
           return result
         } catch (err: any) {
-          console.error(
-            `❌ [AZURE COSMOS DB ERROR] Update "${id}" failed on "${containerName}": ${err.message}`
-          )
+          console.error(`[CosmosDB] Replace "${id}" failed on "${containerName}": ${err.message}`)
           if (isStrictLive) {
             throw new Error(`Azure Cosmos DB Live Replace Failed: ${err.message}`)
           }
@@ -509,15 +435,10 @@ export function getTenantContainer(containerName: string): Container {
       delete: async () => {
         try {
           const result = await withTimeout(realContainer.item(id, partitionKey).delete(), 2500)
-          console.log(
-            `🟢 [AZURE COSMOS DB] Deleted item "${id}" from container "${containerName}" (Live Azure Cloud)`
-          )
           try { await mockContainer.item(id, partitionKey).delete() } catch (_) {}
           return result
         } catch (err: any) {
-          console.error(
-            `❌ [AZURE COSMOS DB ERROR] Delete "${id}" failed on "${containerName}": ${err.message}`
-          )
+          console.error(`[CosmosDB] Delete "${id}" failed on "${containerName}": ${err.message}`)
           if (isStrictLive) {
             throw new Error(`Azure Cosmos DB Live Delete Failed: ${err.message}`)
           }
@@ -526,8 +447,6 @@ export function getTenantContainer(containerName: string): Container {
       },
     }),
   } as unknown as Container
-
-
 }
 
 /**

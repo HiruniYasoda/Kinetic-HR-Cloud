@@ -43,7 +43,7 @@ export function isAcsConfigured(): boolean {
  */
 export async function sendMobileSms(
   phoneNumber: string,
-  message: string
+  _message: string
 ): Promise<SmsDispatchResult> {
   const nowIso = new Date().toISOString()
   const msgId = `sms-${Math.random().toString(36).substring(2, 8)}-${Date.now().toString().slice(-4)}`
@@ -51,9 +51,6 @@ export async function sendMobileSms(
 
   if (isConfigured && endpoint) {
     try {
-      console.log(
-        `🟢 [AZURE ACS SMS GATEWAY] Dispatched Live SMS to ${phoneNumber} on ${endpoint} (Ref: ${msgId})`
-      )
       return {
         success: true,
         messageId: msgId,
@@ -62,15 +59,10 @@ export async function sendMobileSms(
         dispatchedAt: nowIso,
       }
     } catch (err: any) {
-      console.warn(
-        `⚠️  [AZURE ACS ERROR] SMS send failed (${err.message}). Falling back to Simulated Gateway!`
-      )
+      console.warn(`[ACS] SMS send failed (${err.message}), using simulated gateway.`)
     }
   }
 
-  console.log(
-    `🟡 [MOCK ACS SMS GATEWAY] Dispatched Simulated 2FA SMS to ${phoneNumber}: "${message.substring(0, 48)}..."`
-  )
   return {
     success: true,
     messageId: msgId,
@@ -84,19 +76,17 @@ export async function sendMobileSms(
  * Dispatches Official Document Softcopies via Email
  */
 export async function sendEmailSoftcopy(
-  toEmail: string,
+  _toEmail: string,
   _subject: string,
-  documentRef: string
+  _documentRef: string
 ): Promise<{ success: boolean; provider: string; sentAt: string }> {
   const nowIso = new Date().toISOString()
   const { isConfigured, endpoint } = getAcsConfig()
 
   if (isConfigured && endpoint) {
-    console.log(`🟢 [AZURE ACS EMAIL] Dispatched Softcopy Email for #${documentRef} to ${toEmail} on ${endpoint}`)
     return { success: true, provider: 'Azure Communication Services Email', sentAt: nowIso }
   }
 
-  console.log(`🟡 [MOCK ACS EMAIL] Dispatched Simulated Softcopy Email for #${documentRef} to ${toEmail}`)
   return { success: true, provider: 'In-Memory Simulated Email Gateway', sentAt: nowIso }
 }
 

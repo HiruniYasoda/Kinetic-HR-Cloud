@@ -99,17 +99,11 @@ export async function arbitrateLeaveConflict(
       urgencyWeight = 18
     }
 
-    // C. Calculate Deservingness & Fairness Score (0 - 100)
-    // Formula:
-    // Base = 65
-    // + Urgency Weight (+10 to +35)
-    // + First-Time Applicant Bonus (+35 if historicalAbsences === 0)
-    // - Frequency Penalty (- (historicalAbsencesCount * 4))
     const isFirstTime = historicalAbsencesCount === 0
     const firstTimeBonus = isFirstTime ? 35 : 0
     const frequencyPenalty = historicalAbsencesCount * 4
 
-    let rawScore = 65 + urgencyWeight + firstTimeBonus - frequencyPenalty
+    const rawScore = 65 + urgencyWeight + firstTimeBonus - frequencyPenalty
     const aiScore = Math.max(10, Math.min(99, Math.round(rawScore)))
 
     evaluatedCandidates.push({

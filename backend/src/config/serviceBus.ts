@@ -51,9 +51,6 @@ export async function publishHREvent(
 
   if (isConfigured && endpoint) {
     try {
-      console.log(
-        `🟢 [AZURE SERVICE BUS] Published "${eventType}" to topic "${topicName}" on ${endpoint} (Event ID: ${eventId})`
-      )
       return {
         eventId,
         eventType,
@@ -64,15 +61,10 @@ export async function publishHREvent(
         provider: 'Azure Service Bus',
       }
     } catch (err: any) {
-      console.warn(
-        `⚠️  [AZURE SERVICE BUS ERROR] Publish failed (${err.message}). Falling back to In-Memory Event Queue!`
-      )
+      console.warn(`[ServiceBus] Publish failed (${err.message}), using in-memory queue.`)
     }
   }
 
-  console.log(
-    `🟡 [MOCK SERVICE BUS] Published "${eventType}" to In-Memory Event Queue (Topic: "${topicName}")`
-  )
   return {
     eventId,
     eventType,
