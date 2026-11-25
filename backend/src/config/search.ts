@@ -209,7 +209,8 @@ export async function searchPolicies(
   }
 
   if (options?.tenantId) {
-    bodyPayload.filter = `tenantId eq '${options.tenantId}'`
+    const safeTenantId = options.tenantId.replace(/'/g, "''")
+    bodyPayload.filter = `tenantId eq '${safeTenantId}'`
   }
 
   try {
