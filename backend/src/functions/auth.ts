@@ -1,6 +1,38 @@
-import { app, HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
+import { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
+import bcrypt from 'bcryptjs'
 import { queryTenantItems, getTenantContainer } from '../config/cosmos'
 import { signToken } from '../middleware/auth'
+
+function isDevEnvironment(): boolean {
+  return (
+    process.env.NODE_ENV !== 'production' &&
+    (process.env.AZURE_MODE || '').toLowerCase() !== 'live'
+  )
+}
+
+async function verifyUserPassword(user: any, password?: string): Promise<boolean> {
+  const cleanInput = (password || '').trim()
+  if (!cleanInput) return false
+
+  if (user.passwordHash) {
+    return bcrypt.compare(cleanInput, String(user.passwordHash))
+  }
+
+  if (user.password && cleanInput === String(user.password).trim()) {
+    return true
+  }
+
+  if (user.idNumber && cleanInput.toLowerCase() === String(user.idNumber).trim().toLowerCase()) {
+    return true
+  }
+
+  if (isDevEnvironment()) {
+    const lower = cleanInput.toLowerCase()
+    return lower === 'password123' || lower === 'demo123' || lower === 'password123!'
+  }
+
+  return false
+}
 
 /**
  * POST /api/auth/organization
@@ -405,26 +437,13 @@ export async function loginEmployee(
 
     const user = users[0]
 
-    // Verify password with Bcrypt Hashing
-    const expectedPassword = user.password || user.idNumber || 'password123'
-    if (password && password.trim() !== '') {
-      const cleanInput = password.trim()
-      const cleanExpected = expectedPassword.trim()
-      const isDevFallback = cleanInput === 'password123' || cleanInput === 'demo123'
-
-      const isMatch =
-        cleanInput === cleanExpected ||
-        cleanInput.toLowerCase() === cleanExpected.toLowerCase() ||
-        isDevFallback ||
-        (user.passwordHash && user.passwordHash === cleanInput)
-
-      if (!isMatch) {
-        return {
-          status: 401,
-          jsonBody: {
-            error: 'Invalid password. Secure bcrypt authentication failed.',
-          },
-        }
+    const isMatch = await verifyUserPassword(user, password)
+    if (!isMatch) {
+      return {
+        status: 401,
+        jsonBody: {
+          error: 'Invalid credentials. Authentication failed.',
+        },
       }
     }
 
@@ -438,13 +457,12 @@ export async function loginEmployee(
 
     const token = signToken(tokenPayload)
 
-    // Remove sensitive fields before returning
-    delete user.passwordHash
+    const { passwordHash: _ph, password: _pw, ...safeUser } = user
 
     return {
       status: 200,
       jsonBody: {
-        user,
+        user: safeUser,
         token,
         tenant: { id: user.tenantId },
       },
@@ -469,12 +487,28 @@ export async function loginPlatformAdmin(
   try {
     const body = (await request.json()) as { adminId?: string; password?: string }
     const adminId = (body?.adminId || '').trim().toLowerCase()
-    if (!adminId) {
-      return { status: 400, jsonBody: { error: 'Platform Administrator ID is required' } }
+    const cleanPassword = (body?.password || '').trim()
+    if (!adminId || !cleanPassword) {
+      return { status: 400, jsonBody: { error: 'Platform Administrator ID and password are required' } }
     }
 
     if (adminId !== 'kc-0001' && adminId !== 'alex' && adminId !== 'platform_admin' && !adminId.includes('kc-0001')) {
       return { status: 401, jsonBody: { error: 'Invalid Platform Administrator ID. Access is strictly restricted.' } }
+    }
+
+    const configuredAdminPass = process.env.PLATFORM_ADMIN_PASSWORD?.trim()
+    let isPasswordValid = false
+    if (configuredAdminPass) {
+      isPasswordValid = configuredAdminPass.startsWith('$2')
+        ? await bcrypt.compare(cleanPassword, configuredAdminPass)
+        : cleanPassword === configuredAdminPass
+    } else if (isDevEnvironment()) {
+      const lower = cleanPassword.toLowerCase()
+      isPasswordValid = lower === 'password123' || lower === 'demo123' || lower === 'password123!' || lower === 'kc-0001'
+    }
+
+    if (!isPasswordValid) {
+      return { status: 401, jsonBody: { error: 'Invalid Platform Administrator credentials.' } }
     }
 
     const adminUser = {

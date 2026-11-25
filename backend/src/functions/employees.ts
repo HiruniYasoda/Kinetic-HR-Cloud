@@ -1,6 +1,12 @@
 import { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
+import bcrypt from 'bcryptjs'
 import { queryTenantItems, getTenantContainer } from '../config/cosmos'
 import { authenticateRequest } from '../middleware/auth'
+
+function sanitizeEmployee<T extends Record<string, any>>(emp: T): Omit<T, 'password' | 'passwordHash'> {
+  const { password: _pw, passwordHash: _ph, ...safe } = emp
+  return safe
+}
 
 /**
  * GET /api/employees
@@ -26,7 +32,7 @@ export async function getEmployees(
     }
 
     const employees = await queryTenantItems<any>('users', tenantId, query, params)
-    return { status: 200, jsonBody: employees }
+    return { status: 200, jsonBody: employees.map(sanitizeEmployee) }
   } catch (err: any) {
     return { status: 500, jsonBody: { error: err.message } }
   }
@@ -51,8 +57,7 @@ export async function getEmployeeById(
     if (!resource) {
       return { status: 404, jsonBody: { error: 'Employee not found' } }
     }
-    delete resource.passwordHash
-    return { status: 200, jsonBody: resource }
+    return { status: 200, jsonBody: sanitizeEmployee(resource) }
   } catch (err: any) {
     return { status: 500, jsonBody: { error: err.message } }
   }
@@ -80,7 +85,7 @@ export async function getTeamMembers(
     ]
 
     const members = await queryTenantItems<any>('users', tenantId, query, params)
-    return { status: 200, jsonBody: members }
+    return { status: 200, jsonBody: members.map(sanitizeEmployee) }
   } catch (err: any) {
     return { status: 500, jsonBody: { error: err.message } }
   }
@@ -116,11 +121,15 @@ export async function updateEmployee(
       return { status: 403, jsonBody: { error: 'Unauthorized to modify this employee profile' } }
     }
 
+    const newPassword = typeof body.password === 'string' && body.password.trim()
+      ? await bcrypt.hash(body.password.trim(), 10)
+      : undefined
+
     const updated = {
       ...resource,
       // Any authenticated user can update their own avatar and password in their Profile section
       ...(body.avatarUrl !== undefined && { avatarUrl: body.avatarUrl }),
-      ...(body.password !== undefined && { password: body.password }),
+      ...(newPassword !== undefined && { passwordHash: newPassword }),
       // Non-admins cannot alter locked organizational parameters
       ...(isAdmin && body.phone !== undefined && { phone: body.phone }),
       ...(isAdmin && body.location !== undefined && { location: body.location }),
@@ -135,12 +144,12 @@ export async function updateEmployee(
       ...(isAdmin && body.biometricStatus !== undefined && { biometricStatus: body.biometricStatus }),
       updatedAt: new Date().toISOString(),
     }
+    if (newPassword !== undefined) {
+      delete updated.password
+    }
 
     const { resource: saved } = await container.items.upsert(updated)
-    if (saved) {
-      delete (saved as any).passwordHash
-    }
-    return { status: 200, jsonBody: saved }
+    return { status: 200, jsonBody: saved ? sanitizeEmployee(saved) : sanitizeEmployee(updated) }
   } catch (err: any) {
     return { status: 500, jsonBody: { error: err.message } }
   }
@@ -182,7 +191,7 @@ export async function createEmployee(
       location: body.location || '',
       address: body.address || '',
       idNumber: body.idNumber || '',
-      password: body.password || body.idNumber || 'password123',
+      passwordHash: await bcrypt.hash(String(body.password || body.idNumber || 'password123'), 10),
       avatarUrl: body.avatarUrl || '',
       biometricStatus: body.biometricStatus || 'Pending Employee Capture',
       createdAt: new Date().toISOString(),
@@ -190,7 +199,7 @@ export async function createEmployee(
 
     const container = getTenantContainer('users')
     const { resource } = await container.items.create(newEmp)
-    return { status: 201, jsonBody: resource }
+    return { status: 201, jsonBody: sanitizeEmployee(resource || newEmp) }
   } catch (err: any) {
     return { status: 500, jsonBody: { error: err.message } }
   }
