@@ -124,8 +124,10 @@ export async function arbitrateLeaveConflict(
   evaluatedCandidates.sort((a, b) => b.aiScore - a.aiScore)
 
   // 5. Assign ranks and recommendations based on capacity limit
+  const capacityLimit = Math.max(1, Number(allowedCapacityLimit) || 5)
   const aiConfig = getOpenAIConfig()
   let engineMode: 'OpenAI/Azure OpenAI LLM' | 'Kinetic Autonomous NLP & Audit Log Engine' = 'Kinetic Autonomous NLP & Audit Log Engine'
+  let llmSummary: string | undefined
 
   if (aiConfig.isConfigured) {
     try {
@@ -136,12 +138,13 @@ export async function arbitrateLeaveConflict(
         },
         {
           role: 'user',
-          content: `Arbitrate leaves for ${department} on ${conflictDate}. Capacity limit: ${allowedCapacityLimit}. Candidates: ${JSON.stringify(evaluatedCandidates.map(c => ({ name: c.employeeName, score: c.aiScore, urgency: c.urgencyLevel })))}`,
+          content: `Arbitrate leaves for ${department} on ${conflictDate}. Capacity limit: ${capacityLimit}. Candidates: ${JSON.stringify(evaluatedCandidates.map(c => ({ name: c.employeeName, score: c.aiScore, urgency: c.urgencyLevel })))}`,
         },
       ], { maxTokens: 400 })
 
       if (llmResult.content) {
         engineMode = 'OpenAI/Azure OpenAI LLM'
+        llmSummary = llmResult.content.trim()
       }
     } catch (e) {
       console.warn('Live LLM request skipped, falling back to Kinetic Autonomous NLP & Rule Engine:', e)
@@ -150,20 +153,22 @@ export async function arbitrateLeaveConflict(
 
   evaluatedCandidates.forEach((cand, idx) => {
     cand.aiRank = idx + 1
-    const isApproved = idx < allowedCapacityLimit
+    const isApproved = idx < capacityLimit
     cand.aiRecommendation = isApproved ? 'approved' : 'rejected'
 
     if (cand.isFirstTimeApplicant) {
-      cand.aiRationale = `🌟 TOP AI PRIORITY (Rank #${cand.aiRank}): Employee has 0 recorded absences in database history (100% attendance). Elevated over frequent applicants in conflict arbitration.`
+      cand.aiRationale = `TOP AI PRIORITY (Rank #${cand.aiRank}): Employee has 0 recorded absences in database history (100% attendance). Elevated over frequent applicants in conflict arbitration.`
     } else if (isApproved) {
-      cand.aiRationale = `✅ APPROVED BY AI (Rank #${cand.aiRank}): Reason urgency (${cand.urgencyLevel}) and low leave frequency (${cand.historicalAbsencesCount} prior days) qualify within the ${allowedCapacityLimit}-person daily department limit.`
+      cand.aiRationale = `APPROVED BY AI (Rank #${cand.aiRank}): Reason urgency (${cand.urgencyLevel}) and low leave frequency (${cand.historicalAbsencesCount} prior days) qualify within the ${capacityLimit}-person daily department limit.`
     } else {
-      cand.aiRationale = `⚠️ DEFERRED BY AI (Rank #${cand.aiRank}): Exceeds ${allowedCapacityLimit}-person daily department limit. High prior absence frequency (${cand.historicalAbsencesCount} days taken) re-allocated priority to first-time/emergency applicants.`
+      cand.aiRationale = `DEFERRED BY AI (Rank #${cand.aiRank}): Exceeds ${capacityLimit}-person daily department limit. High prior absence frequency (${cand.historicalAbsencesCount} days taken) re-allocated priority to first-time/emergency applicants.`
     }
   })
 
   const topApplicant = evaluatedCandidates[0]
-  const summaryText = topApplicant
+  const summaryText = llmSummary
+    ? llmSummary
+    : topApplicant
     ? `Kinetic AI evaluated ${evaluatedCandidates.length} conflicting leave requests for ${department} on ${conflictDate} using ${engineMode}. Top priority granted to ${topApplicant.employeeName} (AI Score: ${topApplicant.aiScore}%) based on historical attendance integrity and request urgency.`
     : `No conflicting pending leave requests evaluated.`
 
@@ -171,9 +176,9 @@ export async function arbitrateLeaveConflict(
     department,
     conflictDate,
     totalRequestsCount: evaluatedCandidates.length,
-    allowedCapacityLimit,
-    approvedCount: Math.min(evaluatedCandidates.length, allowedCapacityLimit),
-    rejectedCount: Math.max(0, evaluatedCandidates.length - allowedCapacityLimit),
+    allowedCapacityLimit: capacityLimit,
+    approvedCount: Math.min(evaluatedCandidates.length, capacityLimit),
+    rejectedCount: Math.max(0, evaluatedCandidates.length - capacityLimit),
     evaluatedAt: new Date().toISOString(),
     aiEngineMode: engineMode,
     summaryText,
