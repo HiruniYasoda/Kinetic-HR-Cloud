@@ -376,12 +376,12 @@ export async function verifyCommunicationServices(isLiveMode: boolean): Promise<
   const connStr = process.env.AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING || process.env.AZURE_ACS_CONNECTION_STRING
   const isConfigured = !!connStr
 
-  if (!isConfigured) {
+  if (!isLiveMode || !isConfigured) {
     return {
       serviceId: 'communication-services',
       serviceName: 'Azure Communication Services (ACS)',
       category: 'AI & Cognitive',
-      configured: false,
+      configured: isConfigured,
       azureMode: 'mock',
       status: 'MOCK_MODE',
       authenticated: false,
@@ -462,12 +462,12 @@ export async function verifyServiceBus(isLiveMode: boolean): Promise<AzureServic
   const connStr = process.env.AZURE_SERVICE_BUS_CONNECTION_STRING
   const isConfigured = !!connStr
 
-  if (!isConfigured) {
+  if (!isLiveMode || !isConfigured) {
     return {
       serviceId: 'service-bus',
       serviceName: 'Azure Service Bus',
       category: 'Ingestion',
-      configured: false,
+      configured: isConfigured,
       azureMode: 'mock',
       status: 'MOCK_MODE',
       authenticated: false,
@@ -615,12 +615,12 @@ export async function verifyAzureAISearch(isLiveMode: boolean): Promise<AzureSer
   const key = process.env.AZURE_SEARCH_KEY
   const isConfigured = !!(endpoint && key)
 
-  if (!isConfigured) {
+  if (!isLiveMode || !isConfigured) {
     return {
       serviceId: 'ai-search',
       serviceName: 'Azure AI Search (Hybrid Vector)',
       category: 'AI & Cognitive',
-      configured: false,
+      configured: isConfigured,
       azureMode: 'mock',
       status: 'MOCK_MODE',
       authenticated: false,
@@ -683,12 +683,12 @@ export async function verifyDocumentIntelligence(isLiveMode: boolean): Promise<A
   const key = process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY
   const isConfigured = !!(endpoint && key)
 
-  if (!isConfigured) {
+  if (!isLiveMode || !isConfigured) {
     return {
       serviceId: 'doc-intelligence',
       serviceName: 'Azure AI Document Intelligence',
       category: 'AI & Cognitive',
-      configured: false,
+      configured: isConfigured,
       azureMode: 'mock',
       status: 'MOCK_MODE',
       authenticated: false,

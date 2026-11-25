@@ -85,7 +85,7 @@ export async function sendMobileSms(
  */
 export async function sendEmailSoftcopy(
   toEmail: string,
-  subject: string,
+  _subject: string,
   documentRef: string
 ): Promise<{ success: boolean; provider: string; sentAt: string }> {
   const nowIso = new Date().toISOString()

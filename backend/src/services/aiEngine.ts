@@ -53,21 +53,13 @@ export async function arbitrateLeaveConflict(
   conflictDate: string,
   allowedCapacityLimit: number = 5
 ): Promise<AIConflictArbitrationReport> {
-  // 1. Fetch real leave requests for this tenant from Cosmos DB / Memory
+  // 1. Fetch leave requests for this tenant
   const allLeaves = await queryTenantItems<any>(
     'leaves',
     tenantId,
     'SELECT * FROM c WHERE c.tenantId = @tenantId',
     [{ name: '@tenantId', value: tenantId }]
   )
-
-  // 2. Fetch real audit logs to compute actual historical absence frequency
-  const allAuditLogs = await queryTenantItems<any>(
-    'audit_logs',
-    tenantId,
-    'SELECT * FROM c WHERE c.tenantId = @tenantId',
-    [{ name: '@tenantId', value: tenantId }]
-  ).catch(() => [])
 
   // Filter leaves that overlap with conflictDate and match department (if provided)
   const conflictingRequests: LeaveConflictCandidate[] = allLeaves.filter(

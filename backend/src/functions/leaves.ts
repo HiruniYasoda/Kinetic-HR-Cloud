@@ -930,7 +930,7 @@ export async function evaluateAIFairnessLeaves(
             current.updatedAt = new Date().toISOString()
             if (!current.timeline) current.timeline = []
             current.timeline.push({
-              id: `tl-ai-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              id: `tl-ai-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
               action: `ai_${item.aiRecommendation}`,
               actorName: 'Kinetic Autonomous AI Engine',
               timestamp: new Date().toISOString(),

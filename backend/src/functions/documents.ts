@@ -253,7 +253,7 @@ export async function sendDocumentSoftcopy(
 
     // Trigger ACS SMS & Email Dispatch
     await sendMobileSms(
-      '+1 (555) 234-[#842]',
+      doc.employeePhone || auth.user!.phone || '+94 11 234 5678',
       `Kinetic HR Alert: Your signed ${doc.documentType} (#${doc.referenceCode}) has been dispatched to your email & employee portal.`
     )
     await sendEmailSoftcopy(auth.user!.email, `HR Document Softcopy: ${doc.documentType}`, doc.referenceCode)

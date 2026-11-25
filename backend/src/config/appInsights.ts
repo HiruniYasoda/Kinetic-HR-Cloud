@@ -16,7 +16,7 @@ export function isAppInsightsConfigured(): boolean {
 export function trackTelemetryEvent(
   eventName: string,
   properties?: Record<string, string>,
-  metrics?: Record<string, number>
+  _metrics?: Record<string, number>
 ): void {
   if (isAppInsightsConfigured()) {
     console.log(
