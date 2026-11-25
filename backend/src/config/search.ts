@@ -4,6 +4,7 @@
  */
 
 import { generateProductionSeedData } from '../scripts/seedDataGenerator'
+import { loadLocalSettings } from './env'
 
 export interface AzureSearchConfig {
   endpoint: string
@@ -39,30 +40,13 @@ export interface SearchResultItem {
 }
 
 export function getSearchConfig(): AzureSearchConfig {
-  let endpoint = (process.env.AZURE_SEARCH_ENDPOINT || '').trim().replace(/\/$/, '')
-  let key = (process.env.AZURE_SEARCH_KEY || '').trim()
-  let indexName = (process.env.AZURE_SEARCH_INDEX || 'kinetic-hr-policies').trim()
-
-  if (!endpoint || !key) {
-    try {
-      const fs = require('fs')
-      const path = require('path')
-      const candidates = [
-        path.resolve(process.cwd(), 'local.settings.json'),
-        path.resolve(__dirname, '../../local.settings.json'),
-        path.resolve(__dirname, '../../../local.settings.json'),
-      ]
-      for (const p of candidates) {
-        if (fs.existsSync(p)) {
-          const parsed = JSON.parse(fs.readFileSync(p, 'utf-8'))
-          endpoint = endpoint || (parsed.Values?.AZURE_SEARCH_ENDPOINT || '').trim().replace(/\/$/, '')
-          key = key || (parsed.Values?.AZURE_SEARCH_KEY || '').trim()
-          indexName = indexName || (parsed.Values?.AZURE_SEARCH_INDEX || 'kinetic-hr-policies').trim()
-          if (endpoint && key) break
-        }
-      }
-    } catch (_) {}
+  if (!process.env.AZURE_SEARCH_ENDPOINT || !process.env.AZURE_SEARCH_KEY) {
+    loadLocalSettings()
   }
+
+  const endpoint = (process.env.AZURE_SEARCH_ENDPOINT || '').trim().replace(/\/$/, '')
+  const key = (process.env.AZURE_SEARCH_KEY || '').trim()
+  const indexName = (process.env.AZURE_SEARCH_INDEX || 'kinetic-hr-policies').trim()
 
   return {
     endpoint,

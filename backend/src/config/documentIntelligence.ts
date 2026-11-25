@@ -3,6 +3,8 @@
  * OCR & Document Data Extraction with Double-Way Resilience
  */
 
+import { loadLocalSettings } from './env'
+
 export interface DocumentOcrResult {
   confidence: number
   extractedFieldsCount: number
@@ -12,28 +14,12 @@ export interface DocumentOcrResult {
 }
 
 export function getDocumentIntelligenceConfig() {
-  let endpoint = (process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT || '').trim().replace(/\/$/, '')
-  let key = (process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY || '').trim()
-
-  if (!endpoint || !key) {
-    try {
-      const fs = require('fs')
-      const path = require('path')
-      const candidates = [
-        path.resolve(process.cwd(), 'local.settings.json'),
-        path.resolve(__dirname, '../../local.settings.json'),
-        path.resolve(__dirname, '../../../local.settings.json'),
-      ]
-      for (const p of candidates) {
-        if (fs.existsSync(p)) {
-          const parsed = JSON.parse(fs.readFileSync(p, 'utf-8'))
-          endpoint = endpoint || (parsed.Values?.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT || '').trim().replace(/\/$/, '')
-          key = key || (parsed.Values?.AZURE_DOCUMENT_INTELLIGENCE_KEY || '').trim()
-          if (endpoint && key) break
-        }
-      }
-    } catch (_) {}
+  if (!process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT || !process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY) {
+    loadLocalSettings()
   }
+
+  const endpoint = (process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT || '').trim().replace(/\/$/, '')
+  const key = (process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY || '').trim()
 
   return {
     endpoint,

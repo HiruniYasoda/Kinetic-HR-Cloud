@@ -1,6 +1,5 @@
 import http from 'http'
-import fs from 'fs'
-import path from 'path'
+import { loadLocalSettings } from './config/env'
 import { validateOrganization, loginEmployee, loginPlatformAdmin } from './functions/auth'
 import {
   getLeaveBalances,
@@ -82,28 +81,7 @@ import { handleAIChat, getAIHealth } from './functions/ai'
 import { HttpRequest, HttpResponseInit, InvocationContext } from '@azure/functions'
 import { isCosmosConfigured, getCosmosDatabase } from './config/cosmos'
 
-// Load environment variables from local.settings.json or fallback to example
-try {
-  let settingsPath = path.resolve(__dirname, '../../local.settings.json')
-  if (!fs.existsSync(settingsPath)) {
-    settingsPath = path.resolve(process.cwd(), 'local.settings.json')
-  }
-  const examplePath = path.resolve(__dirname, '../../local.settings.json.example')
-  const pathToLoad = fs.existsSync(settingsPath) ? settingsPath : examplePath
-  if (fs.existsSync(pathToLoad)) {
-    const raw = fs.readFileSync(pathToLoad, 'utf-8')
-    const parsed = JSON.parse(raw)
-    if (parsed.Values) {
-      for (const [k, v] of Object.entries(parsed.Values)) {
-        if (!process.env[k]) {
-          process.env[k] = String(v)
-        }
-      }
-    }
-  }
-} catch (e) {
-  console.warn('Could not load local.settings.json', e)
-}
+loadLocalSettings({ fallbackToExample: true })
 
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 7071
 

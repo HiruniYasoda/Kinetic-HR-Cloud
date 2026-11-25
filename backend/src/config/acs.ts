@@ -3,6 +3,8 @@
  * Double-Way Resilient SMS & Email Gateway with Terminal Status Badges
  */
 
+import { loadLocalSettings } from './env'
+
 export interface SmsDispatchResult {
   success: boolean
   messageId: string
@@ -12,33 +14,15 @@ export interface SmsDispatchResult {
 }
 
 export function getAcsConfig() {
-  let connStr = (
+  if (!process.env.AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING && !process.env.AZURE_ACS_CONNECTION_STRING) {
+    loadLocalSettings()
+  }
+
+  const connStr = (
     process.env.AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING ||
     process.env.AZURE_ACS_CONNECTION_STRING ||
     ''
   ).trim()
-
-  if (!connStr) {
-    try {
-      const fs = require('fs')
-      const path = require('path')
-      const candidates = [
-        path.resolve(process.cwd(), 'local.settings.json'),
-        path.resolve(__dirname, '../../local.settings.json'),
-        path.resolve(__dirname, '../../../local.settings.json'),
-      ]
-      for (const p of candidates) {
-        if (fs.existsSync(p)) {
-          const parsed = JSON.parse(fs.readFileSync(p, 'utf-8'))
-          connStr =
-            connStr ||
-            (parsed.Values?.AZURE_COMMUNICATION_SERVICES_CONNECTION_STRING || '').trim() ||
-            (parsed.Values?.AZURE_ACS_CONNECTION_STRING || '').trim()
-          if (connStr) break
-        }
-      }
-    } catch (_) {}
-  }
 
   const endpointPart = connStr.split(';').find(p => p.toLowerCase().startsWith('endpoint='))
   const endpoint = endpointPart ? endpointPart.substring(9).replace(/\/$/, '') : ''
