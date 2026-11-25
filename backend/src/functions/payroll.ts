@@ -14,7 +14,11 @@ export async function getPayslips(
   if (auth.errorResponse) return auth.errorResponse
 
   const tenantId = auth.user!.tenantId
-  const employeeId = request.query.get('employeeId') || (auth.user!.role === 'employee' ? auth.user!.id : undefined)
+  const requestedEmpId = request.query.get('employeeId')
+  if (auth.user!.role === 'employee' && requestedEmpId && requestedEmpId !== auth.user!.id) {
+    return { status: 403, jsonBody: { error: 'Forbidden: employees can only view their own payslips' } }
+  }
+  const employeeId = auth.user!.role === 'employee' ? auth.user!.id : requestedEmpId || undefined
 
   try {
     let query = 'SELECT * FROM c WHERE c.tenantId = @tenantId'
@@ -62,6 +66,10 @@ export async function getPayslipById(
       return { status: 404, jsonBody: { error: 'Payslip not found' } }
     }
 
+    if (auth.user!.role === 'employee' && payslips[0].employeeId !== auth.user!.id) {
+      return { status: 403, jsonBody: { error: 'Forbidden: cannot access another employee payslip' } }
+    }
+
     return { status: 200, jsonBody: payslips[0] }
   } catch (err: any) {
     return { status: 500, jsonBody: { error: err.message } }
@@ -83,6 +91,24 @@ export async function getPayslipDownloadUrl(
   const payslipId = request.params.id
 
   try {
+    const payslips = await queryTenantItems<any>(
+      'payslips',
+      tenantId,
+      'SELECT * FROM c WHERE c.tenantId = @tenantId AND c.id = @id',
+      [
+        { name: '@tenantId', value: tenantId },
+        { name: '@id', value: payslipId },
+      ]
+    )
+
+    if (payslips.length === 0) {
+      return { status: 404, jsonBody: { error: 'Payslip not found' } }
+    }
+
+    if (auth.user!.role === 'employee' && payslips[0].employeeId !== auth.user!.id) {
+      return { status: 403, jsonBody: { error: 'Forbidden: cannot download another employee payslip' } }
+    }
+
     // Generate 15-minute expiring read SAS URL directly to the blob
     const fileName = `${payslipId}.pdf`
     const downloadUrl = await generateTenantBlobSasUrl(tenantId, 'payslips', fileName, 'r', 15)
@@ -104,7 +130,7 @@ export async function calculateBiometricPayroll(
   request: HttpRequest,
   _context: InvocationContext
 ): Promise<HttpResponseInit> {
-  const auth = authenticateRequest(request)
+  const auth = authenticateRequest(request, 'admin')
   if (auth.errorResponse) return auth.errorResponse
 
   const tenantId = auth.user!.tenantId
@@ -282,7 +308,7 @@ export async function updatePaymentSettings(
   request: HttpRequest,
   _context: InvocationContext
 ): Promise<HttpResponseInit> {
-  const auth = authenticateRequest(request)
+  const auth = authenticateRequest(request, 'admin')
   if (auth.errorResponse) return auth.errorResponse
 
   const tenantId = auth.user!.tenantId

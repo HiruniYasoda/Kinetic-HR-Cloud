@@ -42,7 +42,11 @@ export async function getLeaveBalances(
   const auth = authenticateRequest(request)
   if (auth.errorResponse) return auth.errorResponse
 
-  const targetUserId = request.query.get('userId') || auth.user!.id
+  const requestedUserId = request.query.get('userId')
+  if (requestedUserId && requestedUserId !== auth.user!.id && auth.user!.role === 'employee') {
+    return { status: 403, jsonBody: { error: 'Forbidden: cannot access another employee leave balance' } }
+  }
+  const targetUserId = requestedUserId || auth.user!.id
   const tenantId = auth.user!.tenantId
 
   try {
@@ -668,6 +672,13 @@ export async function updateLeaveStatus(
 
     const prevStatus = currentLeave.status
     const newStatus = body.status
+
+    if (auth.user!.role === 'employee') {
+      if (currentLeave.employeeId !== auth.user!.id || newStatus !== 'cancelled') {
+        return { status: 403, jsonBody: { error: 'Forbidden: employees may only cancel their own leave requests' } }
+      }
+    }
+
     const requestedDays = currentLeave.requestedDays || 1
     const empId = currentLeave.employeeId
     const code = currentLeave.leaveTypeCode || 'annual'
@@ -752,6 +763,10 @@ export async function deleteLeaveRequest(
     const { resource: currentLeave } = await container.item(leaveId, tenantId).read().catch(() => ({ resource: null }))
 
     if (currentLeave) {
+      if (auth.user!.role === 'employee' && currentLeave.employeeId !== auth.user!.id) {
+        return { status: 403, jsonBody: { error: 'Forbidden: cannot delete another employee leave request' } }
+      }
+
       const prevStatus = currentLeave.status
       const requestedDays = currentLeave.requestedDays || 1
       const empId = currentLeave.employeeId
@@ -892,7 +907,7 @@ export async function evaluateAIFairnessLeaves(
   request: HttpRequest,
   _context: InvocationContext
 ): Promise<HttpResponseInit> {
-  const auth = authenticateRequest(request)
+  const auth = authenticateRequest(request, 'manager')
   if (auth.errorResponse) return auth.errorResponse
 
   const tenantId = auth.user!.tenantId
@@ -1278,6 +1293,10 @@ export async function deleteLeavePlan(
 
     if (!currentPlan) {
       return { status: 404, jsonBody: { error: `Leave plan "${planId}" not found` } }
+    }
+
+    if (auth.user!.role === 'employee' && currentPlan.employeeId !== auth.user!.id) {
+      return { status: 403, jsonBody: { error: 'Forbidden: cannot cancel another employee leave plan' } }
     }
 
     // Mark plan as cancelled

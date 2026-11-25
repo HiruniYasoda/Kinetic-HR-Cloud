@@ -14,7 +14,11 @@ export async function getAttendanceRecords(
   if (auth.errorResponse) return auth.errorResponse
 
   const tenantId = auth.user!.tenantId
-  const userId = request.query.get('userId') || auth.user!.id
+  const requestedUserId = request.query.get('userId')
+  if (auth.user!.role === 'employee' && requestedUserId && requestedUserId !== auth.user!.id) {
+    return { status: 403, jsonBody: { error: 'Forbidden: employees can only view their own attendance' } }
+  }
+  const userId = auth.user!.role === 'employee' ? auth.user!.id : requestedUserId || auth.user!.id
   const filterDate = request.query.get('date')
 
   try {
@@ -114,7 +118,7 @@ export async function syncFingerprintLogs(
   request: HttpRequest,
   _context: InvocationContext
 ): Promise<HttpResponseInit> {
-  const auth = authenticateRequest(request)
+  const auth = authenticateRequest(request, 'manager')
   if (auth.errorResponse) return auth.errorResponse
 
   try {

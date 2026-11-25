@@ -154,7 +154,7 @@ export async function verify2faAndSignDocument(
   request: HttpRequest,
   _context: InvocationContext
 ): Promise<HttpResponseInit> {
-  const auth = authenticateRequest(request)
+  const auth = authenticateRequest(request, 'manager')
   if (auth.errorResponse) return auth.errorResponse
 
   const tenantId = auth.user!.tenantId
@@ -247,6 +247,9 @@ export async function sendDocumentSoftcopy(
     }
 
     const doc = docs[0]
+    if (auth.user!.role === 'employee' && doc.employeeId !== auth.user!.id) {
+      return { status: 403, jsonBody: { error: 'Forbidden: cannot dispatch another employee document' } }
+    }
 
     // Trigger ACS SMS & Email Dispatch
     await sendMobileSms(
