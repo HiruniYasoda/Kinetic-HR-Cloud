@@ -1,6 +1,4 @@
 import { CosmosClient, Container, Database } from '@azure/cosmos'
-import fs from 'fs'
-import path from 'path'
 import {
   syncItemToDRVault,
   syncItemsToDRVault,
@@ -8,7 +6,7 @@ import {
   getIsDROutageSimulated,
   getDRStatus,
 } from './drVault'
-import { buildSeedCollections } from './seedDataset'
+import { createMockContainer } from './mockCosmos'
 
 export {
   syncItemToDRVault,
@@ -46,153 +44,6 @@ export function getCosmosDatabase(): Database | null {
   return database
 }
 
-
-const LOCAL_DB_FILE = path.resolve(__dirname, '../../../data/local-db.json')
-
-function loadLocalDataFromDisk(): Record<string, any[]> {
-  try {
-    const dir = path.dirname(LOCAL_DB_FILE)
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
-    if (fs.existsSync(LOCAL_DB_FILE)) {
-      const content = fs.readFileSync(LOCAL_DB_FILE, 'utf-8')
-      const parsed = JSON.parse(content)
-      if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
-        return parsed
-      }
-    }
-  } catch (err) {
-    console.warn('Could not read local-db.json, falling back to seed generator:', err)
-  }
-  const seed = buildSeedCollections()
-  saveLocalDataToDisk(seed)
-  return seed
-}
-
-function saveLocalDataToDisk(data?: Record<string, any[]>) {
-  try {
-    const dataToSave = data || LOCAL_MEMORY_DATA
-    const dir = path.dirname(LOCAL_DB_FILE)
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true })
-    }
-    fs.writeFileSync(LOCAL_DB_FILE, JSON.stringify(dataToSave, null, 2), 'utf-8')
-  } catch (err) {
-    console.warn('Failed to save to local-db.json:', err)
-  }
-}
-
-const LOCAL_MEMORY_DATA: Record<string, any[]> = loadLocalDataFromDisk()
-
-/**
- * Creates a mock Cosmos DB container for local offline development
- */
-function createMockContainer(name: string): Container {
-  if (!LOCAL_MEMORY_DATA[name]) {
-    LOCAL_MEMORY_DATA[name] = []
-  }
-  const store = LOCAL_MEMORY_DATA[name]
-
-  return {
-    items: {
-      query: (querySpec: any) => ({
-        fetchAll: async () => {
-          let results = [...store]
-          const qStr = (querySpec?.query || '').toLowerCase()
-          if (qStr.includes('c.status != "cancelled"') || qStr.includes("c.status != 'cancelled'")) {
-            results = results.filter((item: any) => item.status !== 'cancelled')
-          }
-          if (qStr.includes('c.status = "cancelled"') || qStr.includes("c.status = 'cancelled'")) {
-            results = results.filter((item: any) => item.status === 'cancelled')
-          }
-
-          if (querySpec && querySpec.parameters) {
-            // Filter by tenantId
-            const tenantParam = querySpec.parameters.find((p: any) => p.name === '@tenantId')
-            if (tenantParam) {
-              const tVal = String(tenantParam.value).toLowerCase()
-              results = results.filter((item: any) => item.tenantId && item.tenantId.toLowerCase() === tVal)
-            }
-            // Filter by empId (employeeNumber, email, or id)
-            const empParam = querySpec.parameters.find((p: any) => p.name === '@empId')
-            if (empParam) {
-              const eVal = String(empParam.value).toLowerCase()
-              results = results.filter((u: any) =>
-                (u.employeeNumber && u.employeeNumber.toLowerCase() === eVal) ||
-                (u.email && u.email.toLowerCase() === eVal) ||
-                (u.id && u.id.toLowerCase() === eVal)
-              )
-            }
-            // Filter by userId (check userId, managerId, employeeId, or id)
-            const userParam = querySpec.parameters.find((p: any) => p.name === '@userId')
-            if (userParam) {
-              const uVal = String(userParam.value).toLowerCase()
-              results = results.filter((item: any) =>
-                (item.userId && item.userId.toLowerCase() === uVal) ||
-                (item.managerId && item.managerId.toLowerCase() === uVal) ||
-                (item.employeeId && item.employeeId.toLowerCase() === uVal) ||
-                (item.id && item.id.toLowerCase() === uVal)
-              )
-            }
-            // Filter by managerId
-            const mgrParam = querySpec.parameters.find((p: any) => p.name === '@managerId')
-            if (mgrParam) {
-              const mVal = String(mgrParam.value).toLowerCase()
-              results = results.filter((item: any) => item.managerId && item.managerId.toLowerCase() === mVal)
-            }
-            // Filter by employeeId
-            const empIdParam = querySpec.parameters.find((p: any) => p.name === '@employeeId')
-            if (empIdParam) {
-              const eIdVal = String(empIdParam.value).toLowerCase()
-              results = results.filter((item: any) => item.employeeId && item.employeeId.toLowerCase() === eIdVal)
-            }
-            // If searching for organization code/id
-            const orgParam = querySpec.parameters.find((p: any) => p.name === '@orgId')
-            if (orgParam) {
-              const val = String(orgParam.value).toLowerCase()
-              results = results.filter(
-                (o: any) => (o.code && o.code.toLowerCase() === val) || (o.id && o.id.toLowerCase() === val)
-              )
-            }
-          }
-          return { resources: results }
-        },
-      }),
-      create: async (item: any) => {
-        store.push(item)
-        saveLocalDataToDisk()
-        return { resource: item }
-      },
-      upsert: async (item: any) => {
-        const idx = store.findIndex((i: any) => i.id === item.id)
-        if (idx >= 0) store[idx] = item
-        else store.push(item)
-        saveLocalDataToDisk()
-        return { resource: item }
-      },
-    },
-    item: (id: string, _partitionKey?: string) => ({
-      read: async () => {
-        const item = store.find((i: any) => i.id === id)
-        return { resource: item ? { ...item } : null }
-      },
-      replace: async (newItem: any) => {
-        const idx = store.findIndex((i: any) => i.id === id)
-        if (idx >= 0) store[idx] = newItem
-        else store.push(newItem)
-        saveLocalDataToDisk()
-        return { resource: newItem }
-      },
-      delete: async () => {
-        const idx = store.findIndex((i: any) => i.id === id)
-        if (idx >= 0) store.splice(idx, 1)
-        saveLocalDataToDisk()
-        return { resource: {} }
-      },
-    }),
-  } as unknown as Container
-}
 
 export function getTenantContainer(containerName: string): Container {
   const db = getCosmosDatabase()
